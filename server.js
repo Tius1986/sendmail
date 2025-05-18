@@ -39,7 +39,7 @@ transporter.verify(function(error, success) {
 app.post('/send-email', async (req, res) => {
     const { name, email, subject, message } = req.body;
 
-    // Validazione base (puoi aggiungere di più)
+    // Validazione base
     if (!name || !email || !message) {
         return res.status(400).json({ success: false, message: "Please fill in all required fields." });
     }
