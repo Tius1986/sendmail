@@ -18,11 +18,6 @@ app.use(bodyParser.json()); // Per parsare JSON nel corpo della richiesta
 app.use(bodyParser.urlencoded({ extended: true })); // Per parsare dati url-encoded
 
 // --- Configurazione di Nodemailer ---
-// Scegli un metodo di trasporto. Qui un esempio con un account Gmail (meno sicuro per produzione)
-// Per produzione, usa un servizio email transazionale come SendGrid, Mailgun, o un server SMTP dedicato.
-// Oppure, se usi Gmail, dovrai abilitare "Accesso app meno sicure" o usare una "Password per le app".
-// ATTENZIONE: Non mettere MAI le credenziali direttamente nel codice. Usa variabili d'ambiente.
-
 const transporter = nodemailer.createTransport({
     service: process.env.EMAIL_SERVICE || 'gmail', // es. 'gmail', 'hotmail', o configurazione SMTP
     auth: {
@@ -50,8 +45,8 @@ app.post('/send-email', async (req, res) => {
     }
 
     const mailOptions = {
-        from: `"${name}" <${process.env.EMAIL_USER}>`, // Mittente (potrebbe essere l'email dell'utente se il servizio lo permette, altrimenti la tua)
-        replyTo: email, // Importante per permettere a SOEK di rispondere direttamente all'utente
+        from: `"${name}" <${process.env.EMAIL_USER}>`, // Mittente
+        replyTo: email, // Importante per permettere di rispondere direttamente all'utente
         to: process.env.SOEK_EMAIL, // L'indirizzo email di SOEK dove ricevere i contatti
         subject: subject || `Nuovo messaggio da ${name} (Sito SOEK)`,
         html: `
