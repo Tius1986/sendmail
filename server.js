@@ -10,9 +10,9 @@ const PORT = process.env.PORT || 3001; // Porta per il server backend
 
 //Middleware
 app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:1234' // URL del tuo frontend Vite o del sito deployato
+    origin: process.env.FRONTEND_URL || 'http://localhost:56271' // URL del frontend Vite o del sito deployato
     // Se il frontend gira su una porta diversa in locale, aggiornare localhost.
-    // Per la produzione, impostare la variabile d'ambiente FRONTEND_URL al dominio di SOEK.
+    // Per la produzione, impostare la variabile d'ambiente FRONTEND_URL al dominio soek.ch
 }));
 app.use(bodyParser.json()); // Per parsare JSON nel corpo della richiesta
 app.use(bodyParser.urlencoded({ extended: true })); // Per parsare dati url-encoded
