@@ -8,12 +8,26 @@ const bodyParser = require('body-parser');
 const app = express();
 const PORT = process.env.PORT || 3001; // Porta per il server backend
 
-//Middleware
-app.use(cors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:56271' // URL del frontend Vite o del sito deployato
-    // Se il frontend gira su una porta diversa in locale, aggiornare localhost.
-    // Per la produzione, impostare la variabile d'ambiente FRONTEND_URL al dominio soek.ch
-}));
+// Whitelist di domini permessi
+const allowedOrigins = ['https://soek.ch', 'https://www.soek.ch'];
+
+// Configura le opzioni CORS
+const corsOptions = {
+  origin: function (origin, callback) {
+    // Permetti richieste senza 'origin' (es. da Postman, app mobile, o server-to-server)
+    // o se l'origin è nella nostra whitelist
+    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      callback(new Error('Not allowed by CORS'));
+    }
+  },
+  optionsSuccessStatus: 200 // Per browser legacy
+};
+
+// Applica il middleware CORS con le opzioni configurate
+app.use(cors(corsOptions));
+
 app.use(bodyParser.json()); // Per parsare JSON nel corpo della richiesta
 app.use(bodyParser.urlencoded({ extended: true })); // Per parsare dati url-encoded
 
