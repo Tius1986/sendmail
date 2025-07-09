@@ -49,6 +49,11 @@ transporter.verify(function(error, success) {
     }
 });
 
+// Rotta di health check per verificare che il server sia attivo
+app.get('/health', (req, res) => {
+  res.status(200).send('Server is healthy and running.');
+});
+
 // --- Rotta per l'invio dell'email ---
 app.post('/send-email', async (req, res) => {
     const { name, email, subject, message } = req.body;
