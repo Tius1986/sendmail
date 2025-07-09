@@ -1,98 +1,183 @@
 // server.js
-require('dotenv').config(); // Carica le variabili d'ambiente da .env
+require('dotenv').config();
 const express = require('express');
 const nodemailer = require('nodemailer');
 const cors = require('cors');
 const bodyParser = require('body-parser');
 
+// =================================================================
+// CONFIGURAZIONE CENTRALE
+// =================================================================
+
 const app = express();
-const PORT = process.env.PORT || 3001; // Porta per il server backend
+const PORT = process.env.PORT || 3001;
 
-// Whitelist di domini permessi
-const allowedOrigins = ['https://soek.ch', 'https://www.soek.ch'];
+// Whitelist di domini e configurazione CORS
+const allowedOrigins = [
+  'https://soek.ch',
+  'https://www.soek.ch',
+  process.env.DEV_ORIGIN, // Utile per lo sviluppo locale (es. http://localhost:5500)
+].filter(Boolean); // Rimuove valori 'undefined' se DEV_ORIGIN non è impostato
 
-// Configura le opzioni CORS
 const corsOptions = {
-  origin: function (origin, callback) {
-    // Permetti richieste senza 'origin' (es. da Postman, app mobile, o server-to-server)
-    // o se l'origin è nella nostra whitelist
-    if (!origin || allowedOrigins.indexOf(origin) !== -1) {
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
       callback(new Error('Not allowed by CORS'));
     }
   },
-  optionsSuccessStatus: 200 // Per browser legacy
+  optionsSuccessStatus: 200,
 };
 
-// Applica il middleware CORS con le opzioni configurate
+// Testo mappato per i motivi di contatto (più facile da gestire)
+const INQUIRY_REASONS = {
+  booking: "Booking & Collaborations",
+  licensing: "Music Licensing",
+  press: "Press & Media",
+  feedback: "Feedback & Questions",
+  other: "Other"
+};
+
+// =================================================================
+// MIDDLEWARE
+// =================================================================
+
 app.use(cors(corsOptions));
+app.use(bodyParser.json());
 
-app.use(bodyParser.json()); // Per parsare JSON nel corpo della richiesta
-app.use(bodyParser.urlencoded({ extended: true })); // Per parsare dati url-encoded
+// =================================================================
+// SERVIZIO EMAIL (LOGICA DI BUSINESS SEPARATA)
+// =================================================================
 
-// --- Configurazione di Nodemailer ---
-const transporter = nodemailer.createTransport({
-    service: process.env.EMAIL_SERVICE || 'gmail', // es. 'gmail', 'hotmail', o configurazione SMTP
+/**
+ * Crea e configura il transporter di Nodemailer.
+ */
+const createTransporter = () => {
+  return nodemailer.createTransport({
+    service: process.env.EMAIL_SERVICE || 'gmail',
     auth: {
-        user: process.env.EMAIL_USER,         // La tua email da cui inviare
-        pass: process.env.EMAIL_PASSWORD      // La tua password o password per le app
-    }
-});
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+  });
+};
 
-// Verifica la connessione del transporter (opzionale, ma utile per debug)
-transporter.verify(function(error, success) {
-    if (error) {
-        console.error("Errore configurazione Nodemailer:", error);
-    } else {
-        console.log("Nodemailer è pronto per inviare email.");
-    }
-});
+/**
+ * Funzione helper per costruire il contenuto HTML dell'email.
+ * @param {object} data - Dati dal form.
+ * @returns {string} - Contenuto HTML dell'email.
+ */
+const buildEmailHtml = ({ name, email, reasonText, newsletter_signup, message }) => {
+  const newsletterRow = newsletter_signup === 'true'
+    ? `<tr style="background-color: #eaf7e9; border-bottom: 1px solid #eee;">
+         <td style="padding: 8px; width: 120px;"><strong>Newsletter:</strong></td>
+         <td style="padding: 8px;">✅ <strong>Sì, vuole iscriversi!</strong></td>
+       </tr>`
+    : '';
+
+  return `
+    <div style="font-family: Arial, sans-serif; line-height: 1.6; color: #333;">
+      <h2 style="color: #1b263b;">Nuovo Contatto dal Sito Web di SOEK</h2>
+      <table style="width: 100%; border-collapse: collapse;">
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 8px; width: 120px;"><strong>Nome:</strong></td>
+          <td style="padding: 8px;">${name}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 8px;"><strong>Email:</strong></td>
+          <td style="padding: 8px;">${email}</td>
+        </tr>
+        <tr style="border-bottom: 1px solid #eee;">
+          <td style="padding: 8px;"><strong>Motivo:</strong></td>
+          <td style="padding: 8px;"><strong>${reasonText}</strong></td>
+        </tr>
+        ${newsletterRow}
+      </table>
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+      <p><strong>Messaggio:</strong></p>
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px; white-space: pre-wrap;">${message}</div> 
+      <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
+      <p><small>Email inviata da ${email} attraverso il form di contatto.</small></p>
+    </div>
+  `;
+};
+
+// =================================================================
+// GESTORE DELLA ROTTA (CONTROLLER)
+// =================================================================
+
+/**
+ * Gestisce la richiesta di invio email.
+ * @param {express.Request} req - L'oggetto richiesta.
+ * @param {express.Response} res - L'oggetto risposta.
+ */
+const handleSendEmail = async (req, res) => {
+  const { name, email, inquiry_reason, message, newsletter_signup } = req.body;
+
+  if (!name || !email || !message || !INQUIRY_REASONS[inquiry_reason]) {
+    return res.status(400).json({ success: false, message: "Please fill in all required fields." });
+  }
+
+  // Futura logica per la newsletter
+  if (newsletter_signup === 'true') {
+    console.log(`ISCRIZIONE NEWSLETTER: Richiesta da ${email}.`);
+    // await addToMailingList(email, name);
+  }
+  
+  const reasonText = INQUIRY_REASONS[inquiry_reason];
+  const emailSubject = `[Sito SOEK] Nuovo Messaggio: ${reasonText} da ${name}`;
+  const emailHtml = buildEmailHtml({ name, email, reasonText, newsletter_signup, message });
+
+  const mailOptions = {
+    from: `"${name}" <${process.env.EMAIL_USER}>`,
+    replyTo: email,
+    to: process.env.SOEK_EMAIL,
+    subject: emailSubject,
+    html: emailHtml,
+  };
+
+  try {
+    const transporter = createTransporter();
+    await transporter.sendMail(mailOptions);
+    console.log(`Email inviata con successo da: ${email} (Motivo: ${reasonText})`);
+    res.status(200).json({ success: true, message: "Thank you! Your message has been sent." });
+  } catch (error) {
+    console.error("Errore nell'invio dell'email:", error.message);
+    res.status(500).json({ success: false, message: "Oops! There was a problem sending your message." });
+  }
+};
+
+// =================================================================
+// DEFINIZIONE ROTTE
+// =================================================================
+
+app.post('/send-email', handleSendEmail);
 
 // Rotta di health check per verificare che il server sia attivo
 app.get('/health', (req, res) => {
   res.status(200).send('Server is healthy and running.');
 });
 
-// --- Rotta per l'invio dell'email ---
-app.post('/send-email', async (req, res) => {
-    const { name, email, subject, message } = req.body;
+// =================================================================
+// AVVIO DEL SERVER
+// =================================================================
 
-    // Validazione base
-    if (!name || !email || !message) {
-        return res.status(400).json({ success: false, message: "Please fill in all required fields." });
-    }
+const startServer = async () => {
+  try {
+    // Verifica la configurazione di Nodemailer all'avvio
+    const transporter = createTransporter();
+    await transporter.verify();
+    console.log("Nodemailer è pronto per inviare email.");
 
-    const mailOptions = {
-        from: `"${name}" <${process.env.EMAIL_USER}>`, // Mittente
-        replyTo: email, // Importante per permettere di rispondere direttamente all'utente
-        to: process.env.SOEK_EMAIL, // L'indirizzo email di SOEK dove ricevere i contatti
-        subject: subject || `Nuovo messaggio da ${name} (Sito SOEK)`,
-        html: `
-            <h2>Nuovo Contatto dal Sito Web di SOEK</h2>
-            <p><strong>Nome:</strong> ${name}</p>
-            <p><strong>Email:</strong> ${email}</p>
-            <p><strong>Oggetto:</strong> ${subject || 'Nessun oggetto specificato'}</p>
-            <hr>
-            <p><strong>Messaggio:</strong></p>
-            <p>${message.replace(/\n/g, '<br>')}</p> 
-            <hr>
-            <p><small>Email inviata da ${email} attraverso il form di contatto del sito.</small></p>
-        `,
-        // text: `Nuovo messaggio da ${name} (${email}):\nOggetto: ${subject || 'N/D'}\nMessaggio: ${message}` // Versione testuale
-    };
+    app.listen(PORT, () => {
+      console.log(`Server backend in ascolto sulla porta ${PORT}`);
+      console.log(`Domini frontend permessi: ${allowedOrigins.join(', ')}`);
+    });
+  } catch (error) {
+    console.error("Errore critico all'avvio - Impossibile verificare Nodemailer:", error.message);
+    process.exit(1); // Esce dal processo se la configurazione email non è valida
+  }
+};
 
-    try {
-        await transporter.sendMail(mailOptions);
-        console.log(`Email inviata da: ${name} <${email}> a ${process.env.SOEK_EMAIL}`);
-        res.status(200).json({ success: true, message: "Thank you! Your message has been sent." });
-    } catch (error) {
-        console.error("Errore durante l'invio dell'email:", error);
-        res.status(500).json({ success: false, message: "Oops! There was a problem sending your message." });
-    }
-});
-
-app.listen(PORT, () => {
-    console.log(`Server backend in ascolto sulla porta ${PORT}`);
-    console.log(`Accesso frontend previsto da: ${process.env.FRONTEND_URL || 'Configura FRONTEND_URL in .env'}`);
-});
+startServer();
